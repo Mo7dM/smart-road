@@ -1,2 +1,7 @@
+# SDL2 is built from source (the `bundled` feature). Its CMakeLists still
+# declares compatibility with CMake < 3.5, which CMake 4 refuses by default.
+[env]
+CMAKE_POLICY_VERSION_MINIMUM = "3.5"
+
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "link-arg=/DEFAULTLIB:advapi32.lib"]
