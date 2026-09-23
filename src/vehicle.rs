@@ -1,4 +1,4 @@
-use std::time::Instant;
+use crate::path::Path;
 
 /// A cardinal direction. Used both as "the side a vehicle comes from" and as
 /// "the way a vehicle is currently heading" — `Route::from` is the former,
@@ -143,13 +143,67 @@ impl Speed {
     }
 }
 
+/// One autonomous vehicle. Its whole state on the road is a single distance
+/// along its path; position and heading are derived from it every frame.
 pub struct Vehicle {
     pub id: u32,
     pub route: Route,
-    pub position: (f32, f32),
-    pub velocity: f32,
+    pub path: Path,
+    /// Distance covered since spawning, in pixels.
     pub distance_traveled: f32,
-    pub spawn_time: Instant,
-    pub entered_intersection_at: Option<Instant>,
+    /// Current speed in pixels per second.
+    pub velocity: f32,
+    /// The speed the intersection controller wants this vehicle to drive at.
+    pub target_speed: Speed,
+    pub position: (f32, f32),
+    /// Heading in degrees, clockwise, 0 = east.
+    pub angle: f64,
+    /// Simulation time at which the vehicle appeared.
+    pub spawn_time: f32,
+    /// Simulation time at which it reached the intersection, once it has.
+    pub entered_intersection_at: Option<f32>,
     pub exited: bool,
+}
+
+impl Vehicle {
+    pub fn new(id: u32, route: Route, now: f32) -> Vehicle {
+        let path = Path::new(route);
+        let (position, angle) = path.sample(0.0);
+        Vehicle {
+            id,
+            route,
+            path,
+            distance_traveled: 0.0,
+            velocity: Speed::Medium.value(),
+            target_speed: Speed::Medium,
+            position,
+            angle,
+            spawn_time: now,
+            entered_intersection_at: None,
+            exited: false,
+        }
+    }
+
+    pub fn update(&mut self, dt: f32, now: f32) {
+        self.velocity = self.target_speed.value();
+        self.distance_traveled += self.velocity * dt;
+
+        let (position, angle) = self.path.sample(self.distance_traveled);
+        self.position = position;
+        self.angle = angle;
+
+        if self.entered_intersection_at.is_none() && self.distance_traveled >= self.path.box_enter {
+            self.entered_intersection_at = Some(now);
+        }
+        if self.distance_traveled >= self.path.total_len {
+            self.exited = true;
+        }
+    }
+
+    /// True while any part of the vehicle is inside the intersection box.
+    pub fn in_box(&self) -> bool {
+        let half = crate::config::VEHICLE_LENGTH / 2.0;
+        self.distance_traveled + half > self.path.box_enter
+            && self.distance_traveled - half < self.path.box_exit
+    }
 }

@@ -3,10 +3,13 @@
 
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
-use sdl2::render::{Canvas, RenderTarget};
+use sdl2::pixels::PixelFormatEnum;
+use sdl2::render::{BlendMode, Canvas, RenderTarget, Texture, TextureCreator};
+use sdl2::surface::Surface;
 
 use crate::config::*;
 use crate::path;
+use crate::simulation::Simulation;
 use crate::vehicle::{Direction, Route, Turn};
 
 const GRASS: Color = Color::RGB(36, 72, 46);
@@ -28,9 +31,9 @@ pub fn draw_scene<T: RenderTarget>(canvas: &mut Canvas<T>) {
     let h = WINDOW_HEIGHT as f32;
 
     // The two roads, then the box where they overlap.
-    fill(canvas, ASPHALT, INTER_MIN, 0.0, ROAD_WIDTH, h);
-    fill(canvas, ASPHALT, 0.0, INTER_MIN, w, ROAD_WIDTH);
-    fill(canvas, BOX, INTER_MIN, INTER_MIN, ROAD_WIDTH, ROAD_WIDTH);
+    fill(canvas, ASPHALT, BOX_LEFT, 0.0, ROAD_WIDTH, h);
+    fill(canvas, ASPHALT, 0.0, BOX_TOP, w, ROAD_WIDTH);
+    fill(canvas, BOX, BOX_LEFT, BOX_TOP, ROAD_WIDTH, ROAD_WIDTH);
 
     draw_markings(canvas);
 
@@ -51,34 +54,34 @@ fn draw_markings<T: RenderTarget>(canvas: &mut Canvas<T>) {
     for &off in &[LANE_WIDTH, LANE_WIDTH * 2.0] {
         for &sign in &[-1.0f32, 1.0] {
             let x = CENTER_X + sign * off;
-            dashed(canvas, MARKING, x, 0.0, INTER_MIN, true);
-            dashed(canvas, MARKING, x, INTER_MAX, h, true);
+            dashed(canvas, MARKING, x, 0.0, BOX_TOP, true);
+            dashed(canvas, MARKING, x, BOX_BOTTOM, h, true);
 
             let y = CENTER_Y + sign * off;
-            dashed(canvas, MARKING, y, 0.0, INTER_MIN, false);
-            dashed(canvas, MARKING, y, INTER_MAX, w, false);
+            dashed(canvas, MARKING, y, 0.0, BOX_LEFT, false);
+            dashed(canvas, MARKING, y, BOX_RIGHT, w, false);
         }
     }
 
     for &sign in &[-1.0f32, 1.0] {
         let x = CENTER_X + sign * ROAD_HALF;
-        solid(canvas, MARKING, x, 0.0, INTER_MIN, true);
-        solid(canvas, MARKING, x, INTER_MAX, h, true);
+        solid(canvas, MARKING, x, 0.0, BOX_TOP, true);
+        solid(canvas, MARKING, x, BOX_BOTTOM, h, true);
 
         let y = CENTER_Y + sign * ROAD_HALF;
-        solid(canvas, MARKING, y, 0.0, INTER_MIN, false);
-        solid(canvas, MARKING, y, INTER_MAX, w, false);
+        solid(canvas, MARKING, y, 0.0, BOX_LEFT, false);
+        solid(canvas, MARKING, y, BOX_RIGHT, w, false);
     }
 
     // Double yellow line splitting the two directions of travel.
     for &sign in &[-1.0f32, 1.0] {
         let x = CENTER_X + sign * 3.0;
-        solid(canvas, CENTER_LINE, x, 0.0, INTER_MIN, true);
-        solid(canvas, CENTER_LINE, x, INTER_MAX, h, true);
+        solid(canvas, CENTER_LINE, x, 0.0, BOX_TOP, true);
+        solid(canvas, CENTER_LINE, x, BOX_BOTTOM, h, true);
 
         let y = CENTER_Y + sign * 3.0;
-        solid(canvas, CENTER_LINE, y, 0.0, INTER_MIN, false);
-        solid(canvas, CENTER_LINE, y, INTER_MAX, w, false);
+        solid(canvas, CENTER_LINE, y, 0.0, BOX_LEFT, false);
+        solid(canvas, CENTER_LINE, y, BOX_RIGHT, w, false);
     }
 }
 
@@ -90,8 +93,7 @@ fn draw_route_marker<T: RenderTarget>(canvas: &mut Canvas<T>, route: Route) {
 
     let (ux, uy) = heading.unit();
     let along_unit = if heading.is_vertical() { uy } else { ux };
-    let edge = if along_unit > 0.0 { INTER_MIN } else { INTER_MAX };
-    let start = path::entry_point(route, edge - along_unit * 150.0);
+    let start = path::entry_point(route, path::near_edge(heading) - along_unit * 150.0);
 
     let shaft = 40.0;
     let bend = (start.0 + ux * shaft, start.1 + uy * shaft);
@@ -169,4 +171,91 @@ fn arrow_head<T: RenderTarget>(canvas: &mut Canvas<T>, color: Color, tip: (f32, 
         }
         i += 1.0;
     }
+}
+
+// ─── vehicles ──────────────────────────────────────────────────────────────
+
+/// Body colours, cycled through so neighbouring vehicles stay tellable apart.
+const CAR_COLORS: [Color; 6] = [
+    Color::RGB(198, 62, 58),
+    Color::RGB(58, 110, 198),
+    Color::RGB(222, 178, 52),
+    Color::RGB(226, 226, 232),
+    Color::RGB(62, 158, 96),
+    Color::RGB(214, 118, 46),
+];
+
+const GLASS: Color = Color::RGB(132, 186, 218);
+const TYRE: Color = Color::RGB(26, 26, 30);
+const HEADLIGHT: Color = Color::RGB(255, 242, 186);
+const TAILLIGHT: Color = Color::RGB(214, 58, 48);
+
+/// The car sprites, drawn once at start-up rather than loaded from files.
+pub struct Sprites<'a> {
+    cars: Vec<Texture<'a>>,
+}
+
+impl<'a> Sprites<'a> {
+    pub fn new<C>(creator: &'a TextureCreator<C>) -> Sprites<'a> {
+        let cars = CAR_COLORS
+            .iter()
+            .map(|&body| {
+                let surface = car_surface(body);
+                let mut texture = creator.create_texture_from_surface(&surface).unwrap();
+                texture.set_blend_mode(BlendMode::Blend);
+                texture
+            })
+            .collect();
+        Sprites { cars }
+    }
+
+    pub fn draw_vehicles<T: RenderTarget>(&self, canvas: &mut Canvas<T>, sim: &Simulation) {
+        for vehicle in &sim.vehicles {
+            let texture = &self.cars[vehicle.id as usize % self.cars.len()];
+            let dst = Rect::new(
+                (vehicle.position.0 - VEHICLE_LENGTH / 2.0).round() as i32,
+                (vehicle.position.1 - VEHICLE_WIDTH / 2.0).round() as i32,
+                VEHICLE_LENGTH as u32,
+                VEHICLE_WIDTH as u32,
+            );
+            // copy_ex rotates clockwise, which is the same convention the
+            // path uses for its heading angle.
+            let _ = canvas.copy_ex(texture, None, Some(dst), vehicle.angle, None, false, false);
+        }
+    }
+}
+
+/// Draw one car, nose pointing east, on a transparent surface.
+fn car_surface(body: Color) -> Surface<'static> {
+    let l = VEHICLE_LENGTH as u32;
+    let w = VEHICLE_WIDTH as u32;
+    let mut surface = Surface::new(l, w, PixelFormatEnum::RGBA32).unwrap();
+    let mut put = |x: i32, y: i32, rw: u32, rh: u32, color: Color| {
+        let _ = surface.fill_rect(Rect::new(x, y, rw, rh), color);
+    };
+
+    put(0, 0, l, w, Color::RGBA(0, 0, 0, 0));
+    put(5, 0, 6, 3, TYRE);
+    put(5, 17, 6, 3, TYRE);
+    put(21, 0, 6, 3, TYRE);
+    put(21, 17, 6, 3, TYRE);
+    put(1, 2, 30, 16, shade(body, 0.55)); // outline
+    put(2, 3, 28, 14, body);
+    put(9, 4, 13, 12, shade(body, 0.8)); // cabin
+    put(19, 5, 4, 10, GLASS); // windscreen
+    put(8, 5, 3, 10, GLASS); // rear window
+    put(28, 4, 2, 3, HEADLIGHT);
+    put(28, 13, 2, 3, HEADLIGHT);
+    put(2, 4, 2, 3, TAILLIGHT);
+    put(2, 13, 2, 3, TAILLIGHT);
+
+    surface
+}
+
+fn shade(color: Color, factor: f32) -> Color {
+    Color::RGB(
+        (color.r as f32 * factor) as u8,
+        (color.g as f32 * factor) as u8,
+        (color.b as f32 * factor) as u8,
+    )
 }
