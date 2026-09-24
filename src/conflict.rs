@@ -94,6 +94,13 @@ impl Conflicts {
         self.zones[on.index()][against.index()]
     }
 
+    /// True when vehicles at these distances on these routes are both inside
+    /// the stretch where their routes meet: close enough to touch.
+    pub fn both_inside(&self, a: Route, at_a: f32, b: Route, at_b: f32) -> bool {
+        let inside = |zone: Option<(f32, f32)>, at: f32| zone.is_some_and(|(lo, hi)| at >= lo && at <= hi);
+        inside(self.zone(a, b), at_a) && inside(self.zone(b, a), at_b)
+    }
+
     pub fn stop_line(&self, route: Route) -> f32 {
         self.stop_line[route.index()]
     }

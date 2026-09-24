@@ -43,7 +43,7 @@ impl Spawner {
         self.last_spawn.insert(from, now);
         let id = self.next_id;
         self.next_id += 1;
-        Some(Vehicle::new(id, Route { from, turn }, now))
+        Some(Vehicle::new(id, Route { from, turn }))
     }
 
     /// A lane is clear when the vehicle furthest back on it has travelled far

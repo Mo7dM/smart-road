@@ -15,7 +15,7 @@ Subject and audit questions: https://public.01-edu.org/subjects/road_intersectio
 
 ```bash
 cargo run                      # open the simulation window
-cargo test                     # all tests (path geometry invariants)
+cargo test                     # all tests: geometry, controller, traffic, stats
 cargo test path_is_continuous  # a single test by name
 cargo test -- --nocapture      # see println! output from tests
 ```
@@ -95,8 +95,8 @@ keeps the timing statistics reproducible.
 ### No crates beyond sdl2
 
 Randomness is a hand-written xorshift (`rng.rs`), car sprites are drawn from
-rectangles at startup (`render.rs`), and the statistics window will use a
-hand-drawn bitmap font. This is deliberate — it also earns the subject's "own
+rectangles at startup (`render.rs`), and the statistics window uses a
+hand-drawn 5x7 bitmap font (`font.rs`). This is deliberate — it also earns the subject's "own
 assets" bonus. Do not add `rand`, `sdl2_image` or `sdl2_ttf`.
 
 ### Module map
@@ -110,10 +110,11 @@ assets" bonus. Do not add `rand`, `sdl2_image` or `sdl2_ttf`.
 | `simulation.rs` | The world: vehicle list, shared clock, per-frame update |
 | `conflict.rs` | Where routes cross, as distance ranges; stop lines; precomputed once |
 | `controller.rs` | The smart intersection algorithm: sets every `target_speed` each frame |
-| `stats.rs` | What gets recorded and shown on exit |
-| `render.rs` | Road, markings, route arrows, car sprites |
+| `stats.rs` | What gets recorded, and its formatting as label/value rows |
+| `font.rs` | Hand-drawn 5x7 bitmap font: capitals, digits, `. : / -` |
+| `render.rs` | Road, markings, route arrows, car sprites, statistics screen |
 | `input.rs` | Keyboard events to `Command` |
-| `main.rs` | Window, game loop, and the `--snapshot` dev path |
+| `main.rs` | Window, game loop, statistics window, and the `--snapshot` dev path |
 
 `render.rs` is generic over `Canvas<T>` so it draws to a window or an
 offscreen surface with the same code.
@@ -168,20 +169,32 @@ the float tolerance in following must not leak into the stop-line approach.
 rotated-rectangle overlap (deliberately not the disc model), tailgating, and
 throughput / trip time.
 
-**Not done — close calls.** `Statistics::close_calls` is never incremented.
-Needs a definition (same-lane gap below `SAFE_DISTANCE` can no longer happen,
-so probably a crossing-distance threshold) and detection.
+**Done — statistics.** `Esc`, or closing the window, ends the simulation,
+closes its window and opens a second one with the statistics, drawn in the
+bitmap font. `Esc` or its close button quits. Definitions, chosen against the
+subject text:
 
-**Note for statistics:** `Statistics::observe` will now record a min velocity
-of 0 whenever a vehicle waits. Decide whether stopped vehicles count.
+- *Time* is `Vehicle::time`: from spawning (when the controller first sees
+  it) until it is removed from the canvas, as the subject specifies. Not
+  from entering the box.
+- *Min velocity* is the slowest speed actually reached, so 0 as soon as any
+  vehicle has had to stop.
+- *Close call* is a pair of vehicles breaking the safe distance: same lane
+  with a gap under `SAFE_DISTANCE`, or crossing routes both inside the
+  stretch where they meet (`Conflicts::both_inside`). Each pair counts once.
+  The controller prevents both, so it reads 0; the simulation tests assert it.
+- Extra (bonus): vehicles spawned, average time, vehicles that stopped,
+  longest wait, most vehicles on the road at once, simulation length.
 
-**Not done — statistics window.** `Statistics` collects the numbers but
-nothing displays them. `Esc` currently just quits; it must show a window with
-vehicles passed, max/min velocity, max/min time through the intersection, and
-close calls. Needs the hand-drawn bitmap font.
+`simulation.rs` also has tests for two audit questions: 2 Up + 2 Right
+presses give exactly 4 passed, and a single vehicle's max time equals its
+min time and matches its path length at Fast.
 
-**Not done — bonus.** Acceleration and deceleration (vehicles currently snap
-to their target speed in `Vehicle::update`), and extra statistics.
+**Not done — bonus: acceleration.** Vehicles still snap to their target speed
+in `Vehicle::update`. The crossing algorithm relies on that (a vehicle goes
+from stopped to Fast at the line, and its plan windows assume constant
+speeds), so adding acceleration means adding braking and acceleration
+distances to `speed_before` and to `Claim::window`.
 
 ## Working agreement
 

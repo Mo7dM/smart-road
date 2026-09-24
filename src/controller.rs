@@ -206,7 +206,7 @@ mod tests {
     const DT: f32 = 1.0 / 60.0;
 
     fn vehicle(id: u32, from: Direction, turn: Turn, distance: f32) -> Vehicle {
-        let mut v = Vehicle::new(id, Route { from, turn }, 0.0);
+        let mut v = Vehicle::new(id, Route { from, turn });
         v.distance_traveled = distance;
         v
     }

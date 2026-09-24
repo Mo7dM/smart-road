@@ -163,28 +163,34 @@ impl Speed {
 
 /// One autonomous vehicle. Its whole state on the road is a single distance
 /// along its path; position and heading are derived from it every frame.
+///
+/// `distance_traveled`, `time` and `velocity` are the physics the subject
+/// asks for: the controller sets the velocity, and distance grows by
+/// `velocity * dt` while time grows by `dt`.
 pub struct Vehicle {
     pub id: u32,
     pub route: Route,
     pub path: Path,
     /// Distance covered since spawning, in pixels.
     pub distance_traveled: f32,
+    /// Seconds since the intersection controller first saw this vehicle,
+    /// which is the moment it spawned. When it leaves the canvas, this is the
+    /// time it took to pass the intersection.
+    pub time: f32,
     /// Current speed in pixels per second.
     pub velocity: f32,
     /// The speed the intersection controller wants this vehicle to drive at.
     pub target_speed: Speed,
+    /// Seconds spent stopped, waiting behind another vehicle or at the line.
+    pub waited: f32,
     pub position: (f32, f32),
     /// Heading in degrees, clockwise, 0 = east.
     pub angle: f64,
-    /// Simulation time at which the vehicle appeared.
-    pub spawn_time: f32,
-    /// Simulation time at which it reached the intersection, once it has.
-    pub entered_intersection_at: Option<f32>,
     pub exited: bool,
 }
 
 impl Vehicle {
-    pub fn new(id: u32, route: Route, now: f32) -> Vehicle {
+    pub fn new(id: u32, route: Route) -> Vehicle {
         let path = Path::new(route);
         let (position, angle) = path.sample(0.0);
         Vehicle {
@@ -192,36 +198,30 @@ impl Vehicle {
             route,
             path,
             distance_traveled: 0.0,
-            velocity: Speed::Medium.value(),
-            target_speed: Speed::Medium,
+            time: 0.0,
+            velocity: 0.0,
+            target_speed: Speed::Fast,
+            waited: 0.0,
             position,
             angle,
-            spawn_time: now,
-            entered_intersection_at: None,
             exited: false,
         }
     }
 
-    pub fn update(&mut self, dt: f32, now: f32) {
+    pub fn update(&mut self, dt: f32) {
         self.velocity = self.target_speed.value();
         self.distance_traveled += self.velocity * dt;
+        self.time += dt;
+        if self.target_speed == Speed::Stopped {
+            self.waited += dt;
+        }
 
         let (position, angle) = self.path.sample(self.distance_traveled);
         self.position = position;
         self.angle = angle;
 
-        if self.entered_intersection_at.is_none() && self.distance_traveled >= self.path.box_enter {
-            self.entered_intersection_at = Some(now);
-        }
         if self.distance_traveled >= self.path.total_len {
             self.exited = true;
         }
-    }
-
-    /// True while any part of the vehicle is inside the intersection box.
-    pub fn in_box(&self) -> bool {
-        let half = crate::config::VEHICLE_LENGTH / 2.0;
-        self.distance_traveled + half > self.path.box_enter
-            && self.distance_traveled - half < self.path.box_exit
     }
 }

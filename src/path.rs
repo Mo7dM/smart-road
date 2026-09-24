@@ -105,7 +105,6 @@ struct Arc {
 }
 
 pub struct Path {
-    pub route: Route,
     start: (f32, f32),
     heading: Direction,
     exit_heading: Direction,
@@ -187,7 +186,6 @@ impl Path {
         };
 
         Path {
-            route,
             start,
             heading,
             exit_heading,

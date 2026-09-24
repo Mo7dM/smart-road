@@ -8,8 +8,10 @@ use sdl2::render::{BlendMode, Canvas, RenderTarget, Texture, TextureCreator};
 use sdl2::surface::Surface;
 
 use crate::config::*;
+use crate::font;
 use crate::path;
 use crate::simulation::Simulation;
+use crate::stats::Statistics;
 use crate::vehicle::{Direction, Route, Turn};
 
 const GRASS: Color = Color::RGB(36, 72, 46);
@@ -258,4 +260,59 @@ fn shade(color: Color, factor: f32) -> Color {
         (color.g as f32 * factor) as u8,
         (color.b as f32 * factor) as u8,
     )
+}
+
+// ─── statistics window ─────────────────────────────────────────────────────
+
+const PANEL: Color = Color::RGB(30, 31, 35);
+const PANEL_STRIPE: Color = Color::RGB(38, 39, 44);
+const LABEL: Color = Color::RGB(190, 190, 196);
+const VALUE: Color = Color::RGB(250, 250, 250);
+const FAINT: Color = Color::RGB(120, 120, 128);
+
+/// The statistics screen shown when the simulation ends. `elapsed` is how
+/// long the simulation ran, in seconds.
+pub fn draw_statistics<T: RenderTarget>(canvas: &mut Canvas<T>, stats: &Statistics, elapsed: f32) {
+    let w = STATS_WIDTH as i32;
+    let margin = 40;
+    canvas.set_draw_color(PANEL);
+    canvas.clear();
+
+    let title = "STATISTICS";
+    font::draw_text(canvas, title, (w - font::text_width(title, 5) as i32) / 2, 30, 5, CENTER_LINE);
+    fill(canvas, CENTER_LINE, margin as f32, 82.0, (w - 2 * margin) as f32, 3.0);
+
+    let mut y = 104;
+    draw_rows(canvas, &stats.required_rows(), &mut y);
+
+    y += 14;
+    font::draw_text(canvas, "MORE", margin, y, 2, FAINT);
+    fill(canvas, FAINT, (margin + 64) as f32, (y + 6) as f32, (w - 2 * margin - 64) as f32, 1.0);
+    y += 28;
+    draw_rows(canvas, &stats.extra_rows(elapsed), &mut y);
+
+    let footer = "PRESS ESC TO CLOSE";
+    let footer_y = STATS_HEIGHT as i32 - 34;
+    font::draw_text(canvas, footer, (w - font::text_width(footer, 2) as i32) / 2, footer_y, 2, FAINT);
+}
+
+/// Label on the left, value right-aligned, one row per pair, on alternating
+/// stripes. Advances `y` past the rows.
+fn draw_rows<T: RenderTarget>(canvas: &mut Canvas<T>, rows: &[(&str, String)], y: &mut i32) {
+    const SCALE: u32 = 3;
+    const ROW: i32 = 34;
+    let margin = 40;
+    let right = STATS_WIDTH as i32 - margin;
+    let text_h = (font::GLYPH_HEIGHT * SCALE) as i32;
+
+    for (i, (label, value)) in rows.iter().enumerate() {
+        if i % 2 == 0 {
+            fill(canvas, PANEL_STRIPE, (margin - 10) as f32, *y as f32, (right - margin + 20) as f32, ROW as f32);
+        }
+        let text_y = *y + (ROW - text_h) / 2;
+        font::draw_text(canvas, label, margin, text_y, SCALE, LABEL);
+        let value_x = right - font::text_width(value, SCALE) as i32;
+        font::draw_text(canvas, value, value_x, text_y, SCALE, VALUE);
+        *y += ROW;
+    }
 }

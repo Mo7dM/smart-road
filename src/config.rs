@@ -2,6 +2,10 @@
 pub const WINDOW_WIDTH: u32 = 900;
 pub const WINDOW_HEIGHT: u32 = 850;
 
+/// The statistics window shown when the simulation ends.
+pub const STATS_WIDTH: u32 = 720;
+pub const STATS_HEIGHT: u32 = 600;
+
 // ─── Road geometry ─────────────────────────────────────────────────────────
 // The intersection is a cross. Each road carries 3 incoming + 3 outgoing
 // lanes, so a road is 6 lanes wide and both roads meet in a square box.

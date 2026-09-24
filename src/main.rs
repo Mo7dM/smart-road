@@ -1,6 +1,7 @@
 mod config;
 mod conflict;
 mod controller;
+mod font;
 mod input;
 mod path;
 mod render;
@@ -74,6 +75,39 @@ fn main() {
         if let Some(rest) = FRAME.checked_sub(frame_start.elapsed()) {
             std::thread::sleep(rest);
         }
+    }
+
+    // The simulation is over: close its window and open the statistics.
+    drop(sprites);
+    drop(texture_creator);
+    drop(canvas);
+    show_statistics(&video_subsystem, &mut event_pump, &simulation);
+}
+
+/// A second window with the statistics, open until the user closes it or
+/// presses Esc again.
+fn show_statistics(video: &sdl2::VideoSubsystem, event_pump: &mut sdl2::EventPump, simulation: &Simulation) {
+    use sdl2::event::Event;
+    use sdl2::keyboard::Keycode;
+
+    let window = video
+        .window("Smart Road - Statistics", config::STATS_WIDTH, config::STATS_HEIGHT)
+        .position_centered()
+        .build()
+        .unwrap();
+    let mut canvas = window.into_canvas().build().unwrap();
+
+    loop {
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown { keycode: Some(Keycode::Escape), repeat: false, .. } => return,
+                _ => {}
+            }
+        }
+        render::draw_statistics(&mut canvas, &simulation.stats, simulation.time);
+        canvas.present();
+        std::thread::sleep(FRAME);
     }
 }
 
