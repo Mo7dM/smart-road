@@ -38,6 +38,13 @@ pub const VEHICLE_WIDTH: f32 = 20.0;
 /// Gap a vehicle must keep from the one ahead, bumper to bumper.
 pub const SAFE_DISTANCE: f32 = 50.0;
 
+/// How far ahead, in seconds, a vehicle looks when picking its speed behind
+/// another one: it only takes a speed that still leaves `SAFE_DISTANCE` after
+/// this long. A horizon well past one frame makes a closing vehicle step down
+/// Fast -> Medium -> Slow instead of braking at the last moment. It must be
+/// at least the longest frame, or the gap could be broken within one.
+pub const FOLLOW_HORIZON: f32 = 1.0;
+
 /// Minimum delay, in seconds, between two spawns on the same approach, so
 /// that spamming a key never stacks vehicles on top of each other.
 pub const SPAWN_COOLDOWN: f32 = 0.6;

@@ -107,7 +107,7 @@ assets" bonus. Do not add `rand`, `sdl2_image` or `sdl2_ttf`.
 | `path.rs` | Lane coordinates and the arc-length path; the geometry tests live here |
 | `spawner.rs` | Creating vehicles, and the two anti-stacking rules |
 | `simulation.rs` | The world: vehicle list, shared clock, per-frame update |
-| `controller.rs` | The smart intersection algorithm — **currently empty** |
+| `controller.rs` | The smart intersection algorithm: sets every `target_speed` each frame |
 | `stats.rs` | What gets recorded and shown on exit |
 | `render.rs` | Road, markings, route arrows, car sprites |
 | `input.rs` | Keyboard events to `Command` |
@@ -131,12 +131,20 @@ Five tests in `path.rs` cover all twelve routes: each stays in its approach
 lane, exits on the correct lane pointing the right way, rotates exactly 90°
 (0° for straight), never jumps position, and starts and ends off-screen.
 
-**Not done — the smart intersection algorithm** (`controller.rs` is empty).
-Vehicles currently all run at `Speed::Medium` and drive straight through each
-other. This needs:
-- Safe-distance following, so a vehicle never closes on the one ahead.
-- Use of all three velocities, and a reason to pick each.
-- Conflict resolution inside the box, so crossing routes do not collide.
+**Done — safe-distance following.** `controller::update` runs before the
+vehicles move. It walks vehicles front to back, so a follower sees the speed
+its leader was just given this frame. A vehicle with a clear lane drives Fast.
+Behind another, it takes the fastest speed that still leaves `SAFE_DISTANCE`
+after `FOLLOW_HORIZON` (1s), so a closing vehicle steps Fast -> Medium -> Slow.
+Only vehicles on the same route are compared: a lane has one route and no two
+routes share an exit lane.
+
+**Not done — the rest of the smart intersection algorithm.** Vehicles on
+crossing routes still drive straight through each other. This needs:
+- Conflict resolution inside the box, so crossing routes do not collide. It
+  should cap speeds *before* the following pass, so followers react to it.
+- Probably a stop state: `following_speed` falls back to Slow because nothing
+  can drive slower yet.
 - Close-call detection (safe distance violated) for the statistics.
 
 **Not done — statistics window.** `Statistics` collects the numbers but

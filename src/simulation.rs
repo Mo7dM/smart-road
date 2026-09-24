@@ -1,6 +1,7 @@
 //! The world: every vehicle on the road, and the clock they all share.
 
 use crate::config::RANDOM_SPAWN_INTERVAL;
+use crate::controller;
 use crate::rng::Rng;
 use crate::spawner::Spawner;
 use crate::stats::Statistics;
@@ -68,6 +69,8 @@ impl Simulation {
                 self.spawn_random();
             }
         }
+
+        controller::update(&mut self.vehicles);
 
         let now = self.time;
         for vehicle in &mut self.vehicles {

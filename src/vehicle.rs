@@ -108,7 +108,7 @@ impl Turn {
 
 /// Where a vehicle comes from and what it does at the intersection. A lane
 /// has exactly one route, and a vehicle can never change either.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Route {
     pub from: Direction,
     pub turn: Turn,
