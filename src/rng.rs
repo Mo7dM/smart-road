@@ -16,6 +16,12 @@ impl Rng {
         }
     }
 
+    /// A fixed sequence, so a test sees the same traffic on every run.
+    #[cfg(test)]
+    pub fn seeded(seed: u64) -> Rng {
+        Rng { state: seed | 1 }
+    }
+
     pub fn next_u64(&mut self) -> u64 {
         let mut x = self.state;
         x ^= x >> 12;

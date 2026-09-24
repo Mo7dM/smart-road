@@ -45,6 +45,15 @@ pub const SAFE_DISTANCE: f32 = 50.0;
 /// at least the longest frame, or the gap could be broken within one.
 pub const FOLLOW_HORIZON: f32 = 1.0;
 
+/// Extra room, in pixels, kept around a vehicle's body when working out where
+/// two routes can touch. Neighbouring lanes must still never count as
+/// touching, which caps it at a few pixels; a test in `conflict.rs` checks it.
+pub const CROSSING_CLEARANCE: f32 = 4.0;
+
+/// Minimum time, in seconds, between one vehicle leaving a stretch of road
+/// that two routes share and another one entering it.
+pub const CROSSING_MARGIN: f32 = 0.25;
+
 /// Minimum delay, in seconds, between two spawns on the same approach, so
 /// that spamming a key never stacks vehicles on top of each other.
 pub const SPAWN_COOLDOWN: f32 = 0.6;

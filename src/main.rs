@@ -1,4 +1,5 @@
 mod config;
+mod conflict;
 mod controller;
 mod input;
 mod path;

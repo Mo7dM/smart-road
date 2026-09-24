@@ -115,6 +115,20 @@ pub struct Route {
 }
 
 impl Route {
+    pub const COUNT: usize = 12;
+
+    /// Every route, in `index` order.
+    pub fn all() -> impl Iterator<Item = Route> {
+        Direction::ALL
+            .into_iter()
+            .flat_map(|from| Turn::ALL.into_iter().map(move |turn| Route { from, turn }))
+    }
+
+    /// A number in `0..COUNT`, for tables indexed by route.
+    pub fn index(self) -> usize {
+        self.from as usize * Turn::ALL.len() + self.turn as usize
+    }
+
     /// Heading while approaching the intersection.
     pub fn entry_heading(self) -> Direction {
         self.from.opposite()
@@ -126,8 +140,11 @@ impl Route {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// Ordered slowest first, so speeds compare the way their values do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Speed {
+    /// Waiting: behind a stopped vehicle, or at the stop line for a gap.
+    Stopped,
     Slow,
     Medium,
     Fast,
@@ -136,6 +153,7 @@ pub enum Speed {
 impl Speed {
     pub fn value(self) -> f32 {
         match self {
+            Speed::Stopped => 0.0,
             Speed::Slow => crate::config::SPEED_SLOW,
             Speed::Medium => crate::config::SPEED_MEDIUM,
             Speed::Fast => crate::config::SPEED_FAST,

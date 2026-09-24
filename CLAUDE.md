@@ -73,7 +73,8 @@ Two rules generate the entire layout, in `config.rs` + `path.rs`:
    northbound on the east half, and so on. Right turns use the outermost lane
    (offset 100), straight the middle (60), left the innermost (20). Applying
    the same formula with the *exit* heading gives the exit lane, which is why
-   no two paths cross inside the box.
+   no two routes share a lane, before or after the box. Routes from different
+   approaches do cross *inside* it; `conflict.rs` works out where.
 
 2. **Turn radius** — not a tuned constant. It is the distance from the pivot
    (where entry and exit lane centre lines cross) to the edge of the
@@ -107,6 +108,7 @@ assets" bonus. Do not add `rand`, `sdl2_image` or `sdl2_ttf`.
 | `path.rs` | Lane coordinates and the arc-length path; the geometry tests live here |
 | `spawner.rs` | Creating vehicles, and the two anti-stacking rules |
 | `simulation.rs` | The world: vehicle list, shared clock, per-frame update |
+| `conflict.rs` | Where routes cross, as distance ranges; stop lines; precomputed once |
 | `controller.rs` | The smart intersection algorithm: sets every `target_speed` each frame |
 | `stats.rs` | What gets recorded and shown on exit |
 | `render.rs` | Road, markings, route arrows, car sprites |
@@ -131,21 +133,47 @@ Five tests in `path.rs` cover all twelve routes: each stays in its approach
 lane, exits on the correct lane pointing the right way, rotates exactly 90°
 (0° for straight), never jumps position, and starts and ends off-screen.
 
-**Done — safe-distance following.** `controller::update` runs before the
-vehicles move. It walks vehicles front to back, so a follower sees the speed
-its leader was just given this frame. A vehicle with a clear lane drives Fast.
-Behind another, it takes the fastest speed that still leaves `SAFE_DISTANCE`
-after `FOLLOW_HORIZON` (1s), so a closing vehicle steps Fast -> Medium -> Slow.
-Only vehicles on the same route are compared: a lane has one route and no two
-routes share an exit lane.
+**Done — the smart intersection algorithm.** `controller::update` sets every
+`target_speed` before the vehicles move. Two rules:
 
-**Not done — the rest of the smart intersection algorithm.** Vehicles on
-crossing routes still drive straight through each other. This needs:
-- Conflict resolution inside the box, so crossing routes do not collide. It
-  should cap speeds *before* the following pass, so followers react to it.
-- Probably a stop state: `following_speed` falls back to Slow because nothing
-  can drive slower yet.
-- Close-call detection (safe distance violated) for the statistics.
+- *Following* — behind another vehicle in its lane, take the fastest speed
+  that still leaves `SAFE_DISTANCE` after `FOLLOW_HORIZON` (1s), so a closing
+  vehicle steps Fast -> Medium -> Slow -> `Stopped`. Only the same route is
+  compared: a lane carries exactly one route.
+- *Crossing* — `conflict.rs` samples every pair of paths once at startup
+  (each car body as two discs) and records, per pair, the distance range on
+  each path where they could touch, plus a stop line per route. A vehicle
+  crosses its stop line **only at Fast**, and only if its time window in
+  every zone misses every other vehicle's window by `CROSSING_MARGIN`.
+  Past the line it is committed and holds Fast until out of its last zone.
+
+Why it is safe: committed vehicles never change speed, so predictions about
+them are exact, and nothing commits without checking against all of them.
+Because everything past the line drives Fast, a committed vehicle can never
+close on its leader either. Why Fast only: letting vehicles crawl into the
+box at Slow fed on itself (each slow crosser made the next one slow) and
+pushed worst-case trips from ~6s to ~26s. Slow and Medium are for the
+*approach* — timing arrival at the line to meet a gap — and for following.
+
+Priority is first come, first served by id: committed vehicles plan first,
+then approaching ones oldest first. A vehicle waiting at the line claims its
+zones from its earliest possible arrival onwards, so younger vehicles cannot
+starve it. Right turns cross nothing and never wait.
+
+Invariants that bit during development, keep them: a vehicle is committed
+only when *strictly* past its stop line (creeping stops exactly on it), and
+the float tolerance in following must not leak into the stop-line approach.
+
+`simulation.rs` tests drive saturated and `R`-rate traffic and check real
+rotated-rectangle overlap (deliberately not the disc model), tailgating, and
+throughput / trip time.
+
+**Not done — close calls.** `Statistics::close_calls` is never incremented.
+Needs a definition (same-lane gap below `SAFE_DISTANCE` can no longer happen,
+so probably a crossing-distance threshold) and detection.
+
+**Note for statistics:** `Statistics::observe` will now record a min velocity
+of 0 whenever a vehicle waits. Decide whether stopped vehicles count.
 
 **Not done — statistics window.** `Statistics` collects the numbers but
 nothing displays them. `Esc` currently just quits; it must show a window with
